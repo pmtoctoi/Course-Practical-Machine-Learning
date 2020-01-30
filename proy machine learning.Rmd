@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning Project"
+author: "Paul Tocto Inga"
+date: "January 30, 2020"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+  word_document: default
+---
+
+# Executive Summary
+#### GitHub Repo: <https://github.com/pmtoctoi/Course-Practical-Machine-Learning>
+
+The goal of this project is to use data from accelerometers 
+on the belt, forearm, arm, and dumbbell of 6 participants; they 
+were six young healthy participants, that were asked to perform one
+set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five
+different fashions:  
+1) Class A - exactly according to the specification  
+2) Class B - throwing the elbows to the front  
+3) Class C - lifting the dumbbell only halfway  
+4) Class D - lowering the dumbbell only halfway  
+5) Class E - throwing the hips to the front  
+
+To create a model to predict the manner in which they did the exercise.
+The model was built in the following steps:
+a) Getting and preparing the Data
+b) Developing the model(training and testing)
+c) Executing the model
+
+Finally the accuracy of the model is aproximatly 0.99, that classiffy to the model as very good. 
+and also there is used cross validation
+
+### Reference  
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative 
+Activity Recognition of Weight Lifting Exercises. Proceedings of 4th 
+International Conference in Cooperation with SIGCHI (Augmented Human '13).
+Stuttgart, Germany: ACM SIGCHI, 2013.
+
+### Ubication of the Data  
+
+The training data are available at: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available at: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+
+# Getting and preparing the Data
+Using the ubication to download the data, load to R and prepare it for   
+the building the model.  
+
+### Load the libraries and the path of where is the data
+
+```{r warning=FALSE, message=FALSE, echo=TRUE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(e1071)
+library(randomForest)
+set.seed(1)
+path <- paste(getwd(),"/", "machine", sep="")
+train <- file.path(path, "pml-training.csv")
+test <- file.path(path, "pml-testing.csv")
+
+```
+
+### Fill the data with NA if there are missing data (i.e., "NA", "#DIV/0!" and "") and put in memmory
+
+
+```{r}
+
+traindata <- read.csv(train, na.strings=c("NA","#DIV/0!",""))
+testdata <- read.csv(test, na.strings=c("NA","#DIV/0!",""))
+```
+
+### Remove colums that are not needed
+
+```{r}
+# Remove the first seven columns because they are not affect the prediction.
+traindatasecond <- traindata[,8:length(colnames(traindata))]
+testdatasecond <- testdata[,8:length(colnames(testdata))]
+# Remove colums with NAs
+traindatasecond <- traindatasecond[, colSums(is.na(traindatasecond)) == 0] 
+testdatasecond <- testdatasecond[, colSums(is.na(testdatasecond)) == 0] 
+# Verify near zero variance predictors 
+nearzero <- nearZeroVar(traindatasecond,saveMetrics=TRUE)
+nearzeroind <- sum(nearzero$nearzero)
+if ((nearzeroind>0)) {
+        traindatasecond <- traindatasecond[,nearzero$nearzero==FALSE]
+}
+```
+
+### Divide the data   
+The training data is divided in two groups.  This first group is called training set with 70% of the data that is used to train the model.  The second group is a validation set used to assess the model performance.  
+
+```{r}
+datatraining <- createDataPartition(traindatasecond$classe, p=0.70, list=F)
+traindatathird <- traindatasecond[datatraining, ]
+validdatafinal <- traindatasecond[-datatraining, ]
+```
+
+# Model construction  
+### At first train the model  
+We use a Random Forest model because it automatically selects important variables and is robust to correlated covariates & outliers in general. Also is a good algorithm, for both classification and regression problems, to produce a predictive model. Its default hyperparameters already return great results and the system is great at avoiding overfitting.
+
+```{r cache=TRUE}
+controlparm <- trainControl(method="cv", 5)
+rf.model <- train(classe ~ ., data=traindatasecond, method="rf",
+                 trControl=controlparm, ntree=251)
+rf.model
+```
+
+### Aproximate the performance  
+the model generated in the training is tested with the data of validation. 
+Comparing the values generates the accuracy that tell how is the performance 
+of the model with other data.  
+
+```{r}
+rf.predict <- predict(rf.model, validdatafinal)
+confusionMatrix(validdatafinal$classe, rf.predict)
+accuracy <- postResample(rf.predict, validdatafinal$classe)
+acc.out <- accuracy[1]
+overall.ose <- 
+        1 - as.numeric(confusionMatrix(validdatafinal$classe, rf.predict)
+                       $overall[1])
+```
+
+### Performance of the model
+The accuracy is **`r acc.out`** and the Overall Out-of-Sample 
+error is **`r overall.ose`**.
+
+# Execute the model
+The model is used with the test data.
+
+```{r}
+result <- predict(rf.model, 
+                   testdatasecond[, -length(names(testdatasecond))])
+result
+```
+
+# Appendix: Decision Tree Visualization
+
+```{r warning=FALSE}
+treeModel <- rpart(classe ~ ., data=traindatathird, method="class")
+fancyRpartPlot(treeModel)
+```
